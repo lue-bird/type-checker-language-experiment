@@ -4,3 +4,4 @@ Gen
 .vscode
 zombie
 node_modules
+build/main.js
