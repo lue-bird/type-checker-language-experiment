@@ -1,13 +1,16 @@
-module Lau.TypeCheck exposing (Define, DefineCase(..), DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, invalidInfoTextMorphChars, typeMorphChars)
+module Lau.TypeCheck exposing (Define, DefineCase(..), DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, quotedMorphChars, typeMorphChars)
 
 import AToZ exposing (AToZ)
 import AToZ.Morph
 import ArraySized
 import ArraySized.Morph
+import Emptiable exposing (Emptiable)
+import Linear exposing (Direction(..))
 import Maybe.Morph
-import Morph exposing (Morph, MorphRow)
+import Morph exposing (Morph, MorphOrError, MorphRow)
 import N exposing (In, N, N0, N9, n0, n1, n2, n9)
 import N.Morph
+import Stack exposing (Stacked)
 import String.Morph
 import Value.Morph
 
@@ -38,11 +41,11 @@ type DefineCase
 type
     Type
     -- TODO literal set
-    = TypeVariable Identifier
-    | TypeExcept Type
+    = TypeExcept Type
     | TypeSetCounting Type
     | TypeFunction { input : Type, output : Type }
-    | TypeDefined { name : Identifier, argument : Maybe Type }
+    | TypeReference Identifier
+    | TypeConstruct { name : Identifier, argument : Type }
 
 
 type alias InvalidInfo =
@@ -65,23 +68,49 @@ type IdentifierElement
 
 definesMorphChars : MorphRow Defines Char
 definesMorphChars =
-    Morph.narrow listFilledFromHeadAndTail
-        |> Morph.grab listFilledHead defineMorphChars
-        |> Morph.grab listFilledTail
-            (Morph.narrow (\def1Up -> def1Up)
-                |> Morph.match (String.Morph.only "\n")
-                |> Morph.match
-                    (Morph.broad [ () ]
-                        |> Morph.overRow
-                            (Morph.whilePossible (String.Morph.only "\n"))
-                    )
-                |> Morph.grab (\def1Up -> def1Up)
-                    (Morph.whilePossible defineMorphChars)
+    listFilledMorphEndBeforeRecord
+        |> Morph.overRow
+            (Morph.untilNext
+                { end =
+                    defineMorphChars
+                        |> Morph.match
+                            (Morph.broad [ (), () ]
+                                |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
+                            )
+                        |> Morph.match Morph.end
+                , element =
+                    defineMorphChars
+                        |> Morph.match
+                            (Morph.broad [ (), () ]
+                                |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
+                            )
+                }
             )
-        |> Morph.match
-            (Morph.broad [ () ]
-                |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
-            )
+
+
+listFilledMorphEndBeforeRecord :
+    MorphOrError
+        (ListFilled element)
+        { beforeEnd : List element, end : element }
+        error_
+listFilledMorphEndBeforeRecord =
+    Morph.oneToOne
+        (\until ->
+            until.beforeEnd
+                |> Stack.fromList
+                |> Stack.attachAdapt Up (until.end |> Stack.one)
+                |> Stack.toTopBelow
+        )
+        (\stack ->
+            let
+                reverseStack : Emptiable (Stacked element) Never
+                reverseStack =
+                    stack |> Stack.fromTopBelow |> Stack.reverse
+            in
+            { end = reverseStack |> Stack.top
+            , beforeEnd = reverseStack |> Stack.removeTop |> Stack.toList
+            }
+        )
 
 
 defineMorphChars : MorphRow Define Char
@@ -149,6 +178,11 @@ defineInCaseMorphChars config =
                             |> Morph.rowTry (\() -> ()) (String.Morph.only "invalid")
                             |> Morph.choiceFinish
                         )
+                    |> Morph.match (String.Morph.only " ")
+                    |> Morph.match
+                        (Morph.broad []
+                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                        )
                     |> Morph.grab (\invalidInfo -> invalidInfo) invalidInfoMorphChars
                 )
             |> Morph.rowTry DefineMatch (defineMatchMorphChars config)
@@ -158,9 +192,11 @@ defineInCaseMorphChars config =
 
 identifierMorphChars : MorphRow Identifier Char
 identifierMorphChars =
-    Morph.narrow listFilledFromHeadAndTail
-        |> Morph.grab listFilledHead (identifierElementMorphChar |> Morph.one)
-        |> Morph.grab listFilledTail (Morph.whilePossible (identifierElementMorphChar |> Morph.one))
+    Morph.named "identifier"
+        (Morph.narrow listFilledFromHeadAndTail
+            |> Morph.grab listFilledHead (identifierElementMorphChar |> Morph.one)
+            |> Morph.grab listFilledTail (Morph.whilePossible (identifierElementMorphChar |> Morph.one))
+        )
 
 
 identifierElementMorphChar : Morph IdentifierElement Char
@@ -184,7 +220,8 @@ identifierElementMorphChar =
 
 invalidInfoMorphChars : MorphRow InvalidInfo Char
 invalidInfoMorphChars =
-    Morph.whilePossible invalidInfoElementMorphChars
+    Morph.named "invalid info"
+        (Morph.whilePossible invalidInfoElementMorphChars)
 
 
 invalidInfoElementMorphChars : MorphRow InvalidInfoElement Char
@@ -198,40 +235,8 @@ invalidInfoElementMorphChars =
                 InvalidInfoVariable variable ->
                     variableVariant variable
         )
-        |> Morph.rowTry InvalidInfoText invalidInfoTextMorphChars
+        |> Morph.rowTry InvalidInfoText quotedMorphChars
         |> Morph.rowTry InvalidInfoVariable identifierMorphChars
-        |> Morph.choiceFinish
-
-
-invalidInfoTextMorphChars : MorphRow String Char
-invalidInfoTextMorphChars =
-    Morph.narrow (\text -> text)
-        |> Morph.match (String.Morph.only "\"")
-        |> Morph.grab (\text -> text)
-            (String.Morph.list
-                |> Morph.over Morph.broadEnd
-                |> Morph.overRow
-                    (Morph.untilNext
-                        { element = charOrEscapedQuoteMorph
-                        , end = String.Morph.only "\""
-                        }
-                    )
-            )
-
-
-charOrEscapedQuoteMorph : MorphRow Char Char
-charOrEscapedQuoteMorph =
-    Morph.choice
-        (\quoteVariant nonQuoteVariant char ->
-            case char of
-                '"' ->
-                    quoteVariant ()
-
-                nonQuote ->
-                    nonQuoteVariant nonQuote
-        )
-        |> Morph.rowTry (\() -> '"') (String.Morph.only "\\\"")
-        |> Morph.rowTry (\nonQuote -> nonQuote) (Morph.keep |> Morph.one)
         |> Morph.choiceFinish
 
 
@@ -262,11 +267,8 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\variableVariant exceptVariant setCountingVariant functionVariant definedWithArgumentVariant type_ ->
+                (\exceptVariant setCountingVariant functionVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
-                        TypeVariable variableName ->
-                            variableVariant variableName
-
                         TypeExcept negativeType ->
                             exceptVariant negativeType
 
@@ -276,109 +278,136 @@ typeMorphChars =
                         TypeFunction wiring ->
                             functionVariant wiring
 
-                        TypeDefined argument ->
-                            definedWithArgumentVariant argument
+                        TypeReference defined ->
+                            referenceVariant defined
+
+                        TypeConstruct argument ->
+                            typeConstructVariant argument
                 )
-                |> Morph.rowTry TypeVariable identifierMorphChars
                 |> Morph.rowTry TypeExcept
-                    (Morph.narrow (\negativeType -> negativeType)
-                        |> Morph.match (String.Morph.only "except")
-                        |> Morph.match
-                            (Morph.broad [ () ]
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab (\negativeType -> negativeType) step
+                    (Morph.named "except"
+                        (Morph.narrow (\negativeType -> negativeType)
+                            |> Morph.match (String.Morph.only "except")
+                            |> Morph.match
+                                (Morph.broad [ () ]
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab (\negativeType -> negativeType) step
+                        )
                     )
                 |> Morph.rowTry TypeSetCounting
-                    (Morph.narrow (\negativeType -> negativeType)
-                        |> Morph.match (String.Morph.only "setCounting")
-                        |> Morph.match (String.Morph.only " ")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab (\negativeType -> negativeType) step
+                    (Morph.named "set counting"
+                        (Morph.narrow (\negativeType -> negativeType)
+                            |> Morph.match (String.Morph.only "setCounting")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab (\negativeType -> negativeType) step
+                        )
                     )
                 |> Morph.rowTry TypeFunction
-                    (Morph.narrow (\input output -> { input = input, output = output })
-                        |> Morph.match (String.Morph.only "function")
-                        |> Morph.match (String.Morph.only " ")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only "{")
-                        |> Morph.match
-                            (Morph.broad [ () ]
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only "in")
-                        |> Morph.match (String.Morph.only " ")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab .input step
-                        |> Morph.match (String.Morph.only ",")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only "out")
-                        |> Morph.match (String.Morph.only " ")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab .output step
-                        |> Morph.match
-                            (Morph.broad [ () ]
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only "}")
-                    )
-                |> Morph.rowTry TypeDefined
-                    (Morph.narrow (\name argument -> { name = name, argument = argument })
-                        |> Morph.match (String.Morph.only "(")
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab .name identifierMorphChars
-                        |> Morph.grab .argument
-                            (Maybe.Morph.row
-                                (Morph.narrow (\argument -> argument)
-                                    |> Morph.match
-                                        (Morph.broad [ () ]
-                                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                                        )
-                                    |> Morph.grab (\argument -> argument) step
+                    (Morph.named "function"
+                        (Morph.narrow (\input output -> { input = input, output = output })
+                            |> Morph.match (String.Morph.only "function")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
-                            )
-                        |> Morph.match
-                            (Morph.broad []
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only ")")
+                            |> Morph.match (String.Morph.only "{")
+                            |> Morph.match
+                                (Morph.broad [ () ]
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "in")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .input step
+                            |> Morph.match (String.Morph.only ",")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "out")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .output step
+                            |> Morph.match
+                                (Morph.broad [ () ]
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "}")
+                        )
+                    )
+                |> Morph.rowTry TypeReference (Morph.named "defined" identifierMorphChars)
+                |> Morph.rowTry TypeConstruct
+                    (Morph.named "defined with argument"
+                        (Morph.narrow (\name argument -> { name = name, argument = argument })
+                            |> Morph.match (String.Morph.only "(")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .name identifierMorphChars
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad [ () ]
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .argument step
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only ")")
+                        )
                     )
                 |> Morph.choiceFinish
         )
 
 
-type alias ListFilled a =
-    ( a, List a )
+
+--
 
 
-listFilledFromHeadAndTail head tail =
-    ( head, tail )
+quotedMorphChars : MorphRow String Char
+quotedMorphChars =
+    Morph.narrow (\text -> text)
+        |> Morph.match (String.Morph.only "\"")
+        |> Morph.grab (\text -> text)
+            (String.Morph.list
+                |> Morph.over Morph.broadEnd
+                |> Morph.overRow
+                    (Morph.untilNext
+                        { element = charOrEscapedQuoteMorph
+                        , end = String.Morph.only "\""
+                        }
+                    )
+            )
 
 
-listFilledHead =
-    \( headElement, _ ) -> headElement
+charOrEscapedQuoteMorph : MorphRow Char Char
+charOrEscapedQuoteMorph =
+    Morph.choice
+        (\quoteVariant nonQuoteVariant char ->
+            case char of
+                '"' ->
+                    quoteVariant ()
 
-
-listFilledTail =
-    \( _, tailList ) -> tailList
+                nonQuote ->
+                    nonQuoteVariant nonQuote
+        )
+        |> Morph.rowTry (\() -> '"') (String.Morph.only "\\\"")
+        |> Morph.rowTry (\nonQuote -> nonQuote) (Morph.keep |> Morph.one)
+        |> Morph.choiceFinish
 
 
 
@@ -398,3 +427,23 @@ morphLazy structureName buildMorph =
     , toNarrow = \beforeToNarrow -> beforeToNarrow |> Morph.toNarrow (buildMorph ())
     , toBroad = \beforeToBroad -> beforeToBroad |> Morph.toBroad (buildMorph ())
     }
+
+
+
+--
+
+
+type alias ListFilled a =
+    ( a, List a )
+
+
+listFilledFromHeadAndTail head tail =
+    ( head, tail )
+
+
+listFilledHead =
+    \( headElement, _ ) -> headElement
+
+
+listFilledTail =
+    \( _, tailList ) -> tailList
