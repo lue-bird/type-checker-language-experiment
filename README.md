@@ -9,7 +9,7 @@ An example of what it roughly looks like
 c : (choice possibilities)
     possibilities : {}
         ⨯ "none of the possibilities matched"
-    possibilities : { a, ...x }
+    possibilities : { a ...x }
         c : a
             c : a
             c : (except a)
@@ -27,7 +27,7 @@ c : set element
 c : character
     c : naturalInRange { (start 0) (end 1114112) }
 
-c : naturalInRange { (start minimum), (end maximum) }
+c : naturalInRange { (start minimum) (end maximum) }
     c : 0
         minimum : 0
         minimum : (1Plus minimumFrom1)
