@@ -139,12 +139,32 @@ defineCaseMorphChars config =
                         |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                     )
                 |> Morph.grab .type_ typeMorphChars
+                |> Morph.grab .simplified (caseSimplifiedMorphChars config)
+        )
+
+
+caseSimplifiedMorphChars : { indentation : Int } -> MorphRow DefineInCase Char
+caseSimplifiedMorphChars config =
+    Morph.choice
+        (\keepGoing valid defineInCase ->
+            case defineInCase of
+                DefineValid ->
+                    valid ()
+
+                invalidOrMatch ->
+                    keepGoing invalidOrMatch
+        )
+        |> Morph.rowTry (\simplified -> simplified)
+            (Morph.narrow (\simplified -> simplified)
                 |> Morph.match
                     (String.Morph.only
                         ("\n" ++ String.repeat (config.indentation + 1) "    ")
                     )
-                |> Morph.grab .simplified (defineInCaseMorphChars { indentation = config.indentation + 1 })
-        )
+                |> Morph.grab (\simplified -> simplified)
+                    (defineInCaseMorphChars { indentation = config.indentation + 1 })
+            )
+        |> Morph.rowTry (\() -> DefineValid) (Morph.narrow ())
+        |> Morph.choiceFinish
 
 
 defineInCaseMorphChars : { indentation : Int } -> MorphRow DefineInCase Char
