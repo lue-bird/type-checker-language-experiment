@@ -1,4 +1,4 @@
-module Lau.TypeCheck exposing (Define, DefineAtom(..), DefineCase(..), DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineAtomMorphChars, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, invalidInfoTextMorphChars, typeMorphChars)
+module Lau.TypeCheck exposing (Define, DefineCase(..), DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, invalidInfoTextMorphChars, typeMorphChars)
 
 import AToZ exposing (AToZ)
 import AToZ.Morph
@@ -22,13 +22,9 @@ type alias Define =
 
 
 type DefineInCase
-    = DefineAtom DefineAtom
-    | DefineMatch DefineMatch
-
-
-type DefineAtom
     = DefineValid
     | DefineInvalid InvalidInfo
+    | DefineMatch DefineMatch
 
 
 type alias DefineMatch =
@@ -128,48 +124,36 @@ defineInCaseMorphChars : { indentation : Int } -> MorphRow DefineInCase Char
 defineInCaseMorphChars config =
     Morph.named "define in case"
         (Morph.choice
-            (\atomVariant matchVariant defineInCase ->
+            (\validVariant invalidVariant matchVariant defineInCase ->
                 case defineInCase of
-                    DefineAtom atom ->
-                        atomVariant atom
+                    DefineValid ->
+                        validVariant ()
+
+                    DefineInvalid invalid ->
+                        invalidVariant invalid
 
                     DefineMatch match ->
                         matchVariant match
             )
-            |> Morph.rowTry DefineAtom defineAtomMorphChars
+            |> Morph.rowTry (\() -> DefineValid)
+                (Morph.choice (\check _ () -> check ())
+                    |> Morph.rowTry (\() -> ()) (String.Morph.only "✓")
+                    |> Morph.rowTry (\() -> ()) (String.Morph.only "valid")
+                    |> Morph.choiceFinish
+                )
+            |> Morph.rowTry DefineInvalid
+                (Morph.narrow (\invalidInfo -> invalidInfo)
+                    |> Morph.match
+                        (Morph.choice (\x _ () -> x ())
+                            |> Morph.rowTry (\() -> ()) (String.Morph.only "⨯")
+                            |> Morph.rowTry (\() -> ()) (String.Morph.only "invalid")
+                            |> Morph.choiceFinish
+                        )
+                    |> Morph.grab (\invalidInfo -> invalidInfo) invalidInfoMorphChars
+                )
             |> Morph.rowTry DefineMatch (defineMatchMorphChars config)
             |> Morph.choiceFinish
         )
-
-
-defineAtomMorphChars : MorphRow DefineAtom Char
-defineAtomMorphChars =
-    Morph.choice
-        (\valid invalid atom ->
-            case atom of
-                DefineValid ->
-                    valid ()
-
-                DefineInvalid invalidInfo ->
-                    invalid invalidInfo
-        )
-        |> Morph.rowTry (\() -> DefineValid)
-            (Morph.choice (\check _ () -> check ())
-                |> Morph.rowTry (\() -> ()) (String.Morph.only "✓")
-                |> Morph.rowTry (\() -> ()) (String.Morph.only "valid")
-                |> Morph.choiceFinish
-            )
-        |> Morph.rowTry DefineInvalid
-            (Morph.narrow (\invalidInfo -> invalidInfo)
-                |> Morph.match
-                    (Morph.choice (\x _ () -> x ())
-                        |> Morph.rowTry (\() -> ()) (String.Morph.only "⨯")
-                        |> Morph.rowTry (\() -> ()) (String.Morph.only "invalid")
-                        |> Morph.choiceFinish
-                    )
-                |> Morph.grab (\invalidInfo -> invalidInfo) invalidInfoMorphChars
-            )
-        |> Morph.choiceFinish
 
 
 identifierMorphChars : MorphRow Identifier Char
