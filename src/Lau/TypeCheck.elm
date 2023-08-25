@@ -410,14 +410,18 @@ quotedMorphChars =
 charOrEscapedQuoteMorph : MorphRow Char Char
 charOrEscapedQuoteMorph =
     Morph.choice
-        (\quoteVariant nonQuoteVariant char ->
+        (\slashVariant quoteVariant nonQuoteVariant char ->
             case char of
+                '\\' ->
+                    slashVariant ()
+
                 '"' ->
                     quoteVariant ()
 
                 nonQuote ->
                     nonQuoteVariant nonQuote
         )
+        |> Morph.rowTry (\() -> '\\') (String.Morph.only "\\\\")
         |> Morph.rowTry (\() -> '"') (String.Morph.only "\\\"")
         |> Morph.rowTry (\nonQuote -> nonQuote) (Morph.keep |> Morph.one)
         |> Morph.choiceFinish
