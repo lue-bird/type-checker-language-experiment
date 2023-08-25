@@ -74,18 +74,25 @@ definesMorphChars =
         |> Morph.overRow
             (Morph.untilNext
                 { end =
-                    defineMorphChars
+                    Morph.narrow (\end -> end)
                         |> Morph.match
-                            (Morph.broad [ (), () ]
+                            (Morph.broad [ () ]
+                                |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
+                            )
+                        |> Morph.grab (\end -> end) defineMorphChars
+                        |> Morph.match
+                            (Morph.broad [ () ]
                                 |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
                             )
                         |> Morph.match Morph.end
                 , element =
-                    defineMorphChars
+                    Morph.narrow (\element -> element)
                         |> Morph.match
-                            (Morph.broad [ (), () ]
+                            (Morph.broad [ () ]
                                 |> Morph.overRow (Morph.whilePossible (String.Morph.only "\n"))
                             )
+                        |> Morph.grab (\element -> element) defineMorphChars
+                        |> Morph.match (String.Morph.only "\n")
                 }
             )
 
