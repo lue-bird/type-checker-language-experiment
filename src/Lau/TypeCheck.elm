@@ -42,6 +42,7 @@ type
     Type
     -- TODO literal set
     = TypeReference Identifier
+    | TypeCountingSet (List Type)
     | TypeExceptConstruct Type
     | TypeSetCountingConstruct Type
     | TypeFunctionConstruct { input : Type, output : Type }
@@ -276,16 +277,16 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\exceptVariant setCountingVariant functionVariant referenceVariant typeConstructVariant type_ ->
+                (\exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
                         TypeExceptConstruct negativeType ->
-                            exceptVariant negativeType
+                            exceptConstructVariant negativeType
 
                         TypeSetCountingConstruct typeSet ->
-                            setCountingVariant typeSet
+                            setCountingConstructVariant typeSet
 
                         TypeFunctionConstruct wiring ->
-                            functionVariant wiring
+                            functionConstructVariant wiring
 
                         TypeReference defined ->
                             referenceVariant defined
@@ -294,7 +295,7 @@ typeMorphChars =
                             typeConstructVariant argument
                 )
                 |> Morph.rowTry TypeExceptConstruct
-                    (Morph.named "except"
+                    (Morph.named "except construct"
                         (Morph.narrow (\negativeType -> negativeType)
                             |> Morph.match (String.Morph.only "except")
                             |> Morph.match
@@ -305,7 +306,7 @@ typeMorphChars =
                         )
                     )
                 |> Morph.rowTry TypeSetCountingConstruct
-                    (Morph.named "set counting"
+                    (Morph.named "set counting construct"
                         (Morph.narrow (\negativeType -> negativeType)
                             |> Morph.match (String.Morph.only "setCounting")
                             |> Morph.match (String.Morph.only " ")
@@ -317,7 +318,7 @@ typeMorphChars =
                         )
                     )
                 |> Morph.rowTry TypeFunctionConstruct
-                    (Morph.named "function"
+                    (Morph.named "function construct"
                         (Morph.narrow (\input output -> { input = input, output = output })
                             |> Morph.match (String.Morph.only "function")
                             |> Morph.match (String.Morph.only " ")
@@ -356,9 +357,9 @@ typeMorphChars =
                             |> Morph.match (String.Morph.only "}")
                         )
                     )
-                |> Morph.rowTry TypeReference (Morph.named "defined" identifierMorphChars)
+                |> Morph.rowTry TypeReference (Morph.named "reference" identifierMorphChars)
                 |> Morph.rowTry TypeConstruct
-                    (Morph.named "defined with argument"
+                    (Morph.named "construct"
                         (Morph.narrow (\name argument -> { name = name, argument = argument })
                             |> Morph.match (String.Morph.only "(")
                             |> Morph.match
