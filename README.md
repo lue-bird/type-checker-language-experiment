@@ -44,3 +44,6 @@ c : naturalInRange {start minimum ..{end maximum..{}}}
             minimum : 1Plus minimumFrom1
                 cFrom1 : naturalInRange {start minimumFrom1 ..{end 1Plus maximumFrom1 ..{}}}
 ```
+
+### what's next?
+Implementing exhaustiveness checking.
