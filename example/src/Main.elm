@@ -69,6 +69,14 @@ c : naturalAtLeast minimum
         c : 1Plus cFrom1
             cFrom1 : naturalAtLeast minimumFrom1
                 valid
+
+c : setFilled {a ..b}
+    c : {a ..b}
+        a : {value count 1 ..{key aElement ..{}}}
+            aElement : element
+                b : set element
+        a : {value count 1Plus countFrom1 ..{key aElement ..{}}}
+            ⨯ aElement "is present multiple times"
 """
 
 
