@@ -108,7 +108,7 @@ listFilledMorphEndBeforeRecord =
                     stack |> Stack.fromTopBelow |> Stack.reverse
             in
             { end = reverseStack |> Stack.top
-            , beforeEnd = reverseStack |> Stack.removeTop |> Stack.toList
+            , beforeEnd = reverseStack |> Stack.removeTop |> Stack.toList |> List.reverse
             }
         )
 
