@@ -49,7 +49,7 @@ type
 
 
 type alias InvalidInfo =
-    List InvalidInfoElement
+    ListFilled InvalidInfoElement
 
 
 type InvalidInfoElement
@@ -193,7 +193,7 @@ defineInCaseMorphChars config =
 identifierMorphChars : MorphRow Identifier Char
 identifierMorphChars =
     Morph.named "identifier"
-        (Morph.narrow listFilledFromHeadAndTail
+        (Morph.narrow listFilledHeadTail
             |> Morph.grab listFilledHead (identifierElementMorphChar |> Morph.one)
             |> Morph.grab listFilledTail (Morph.whilePossible (identifierElementMorphChar |> Morph.one))
         )
@@ -221,7 +221,20 @@ identifierElementMorphChar =
 invalidInfoMorphChars : MorphRow InvalidInfo Char
 invalidInfoMorphChars =
     Morph.named "invalid info"
-        (Morph.whilePossible invalidInfoElementMorphChars)
+        (Morph.narrow listFilledHeadTail
+            |> Morph.grab listFilledHead invalidInfoElementMorphChars
+            |> Morph.grab listFilledTail
+                (Morph.whilePossible
+                    (Morph.narrow (\element -> element)
+                        |> Morph.match (String.Morph.only " ")
+                        |> Morph.match
+                            (Morph.broad []
+                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                            )
+                        |> Morph.grab (\element -> element) invalidInfoElementMorphChars
+                    )
+                )
+        )
 
 
 invalidInfoElementMorphChars : MorphRow InvalidInfoElement Char
@@ -243,7 +256,7 @@ invalidInfoElementMorphChars =
 defineMatchMorphChars : { indentation : Int } -> MorphRow DefineMatch Char
 defineMatchMorphChars config =
     Morph.named "match"
-        (Morph.narrow listFilledFromHeadAndTail
+        (Morph.narrow listFilledHeadTail
             |> Morph.grab listFilledHead (defineCaseMorphChars config)
             |> Morph.match
                 (String.Morph.only
@@ -437,7 +450,7 @@ type alias ListFilled a =
     ( a, List a )
 
 
-listFilledFromHeadAndTail head tail =
+listFilledHeadTail head tail =
     ( head, tail )
 
 
