@@ -41,9 +41,9 @@ type DefineCase
 type
     Type
     -- TODO literal set
-    = TypeExcept Type
-    | TypeSetCounting Type
-    | TypeFunction { input : Type, output : Type }
+    = TypeExceptConstruct Type
+    | TypeSetCountingConstruct Type
+    | TypeFunctionConstruct { input : Type, output : Type }
     | TypeReference Identifier
     | TypeConstruct { name : Identifier, argument : Type }
 
@@ -278,13 +278,13 @@ typeMorphChars =
             Morph.choice
                 (\exceptVariant setCountingVariant functionVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
-                        TypeExcept negativeType ->
+                        TypeExceptConstruct negativeType ->
                             exceptVariant negativeType
 
-                        TypeSetCounting typeSet ->
+                        TypeSetCountingConstruct typeSet ->
                             setCountingVariant typeSet
 
-                        TypeFunction wiring ->
+                        TypeFunctionConstruct wiring ->
                             functionVariant wiring
 
                         TypeReference defined ->
@@ -293,7 +293,7 @@ typeMorphChars =
                         TypeConstruct argument ->
                             typeConstructVariant argument
                 )
-                |> Morph.rowTry TypeExcept
+                |> Morph.rowTry TypeExceptConstruct
                     (Morph.named "except"
                         (Morph.narrow (\negativeType -> negativeType)
                             |> Morph.match (String.Morph.only "except")
@@ -304,7 +304,7 @@ typeMorphChars =
                             |> Morph.grab (\negativeType -> negativeType) step
                         )
                     )
-                |> Morph.rowTry TypeSetCounting
+                |> Morph.rowTry TypeSetCountingConstruct
                     (Morph.named "set counting"
                         (Morph.narrow (\negativeType -> negativeType)
                             |> Morph.match (String.Morph.only "setCounting")
@@ -316,7 +316,7 @@ typeMorphChars =
                             |> Morph.grab (\negativeType -> negativeType) step
                         )
                     )
-                |> Morph.rowTry TypeFunction
+                |> Morph.rowTry TypeFunctionConstruct
                     (Morph.named "function"
                         (Morph.narrow (\input output -> { input = input, output = output })
                             |> Morph.match (String.Morph.only "function")
