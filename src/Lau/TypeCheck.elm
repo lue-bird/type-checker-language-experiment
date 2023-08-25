@@ -42,7 +42,7 @@ type
     Type
     -- TODO literal set
     = TypeReference Identifier
-    | TypeCountingSet (List Type)
+    | TypeSetCounting (List Type)
     | TypeExceptConstruct Type
     | TypeSetCountingConstruct Type
     | TypeFunctionConstruct { input : Type, output : Type }
@@ -279,7 +279,7 @@ typeMorphChars =
             Morph.choice
                 (\setCountingVariant exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
-                        TypeCountingSet setCounting ->
+                        TypeSetCounting setCounting ->
                             setCountingVariant setCounting
 
                         TypeExceptConstruct negativeType ->
@@ -297,7 +297,7 @@ typeMorphChars =
                         TypeConstruct argument ->
                             typeConstructVariant argument
                 )
-                |> Morph.rowTry TypeCountingSet (typeCountingSetMorphChars step)
+                |> Morph.rowTry TypeSetCounting (typeCountingSetMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct
                     (Morph.named "except construct"
                         (Morph.narrow (\negativeType -> negativeType)
