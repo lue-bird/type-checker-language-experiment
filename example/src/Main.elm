@@ -200,7 +200,11 @@ inputAndDescriptionUi config =
             ]
             (Ui.text config.title)
         , Ui.row [ Ui.spacing 50, UiFont.size 17 ]
-            [ Ui.column [ Ui.width Ui.fill ]
+            [ Ui.column
+                [ Ui.width Ui.fill
+                , Ui.height Ui.fill
+                , Ui.alignTop
+                ]
                 [ Ui.el
                     [ Ui.paddingEach { eachSide0 | right = 5 }
                     ]
@@ -223,7 +227,11 @@ inputAndDescriptionUi config =
                     , placeholder = Nothing
                     , spellcheck = True
                     }
-                    |> Ui.el [ Ui.width Ui.fill ]
+                    |> Ui.el
+                        [ Ui.width Ui.fill
+                        , Ui.height Ui.fill
+                        , Ui.alignTop
+                        ]
                 ]
             , Ui.column []
                 [ case config.input |> Morph.toNarrow config.morph of
