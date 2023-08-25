@@ -38,11 +38,10 @@ type DefineCase
     = IsOfTypeSimplifiesTo { variable : Identifier, type_ : Type, simplified : DefineInCase }
 
 
-type
-    Type
-    -- TODO literal set
+type Type
     = TypeReference Identifier
     | TypeSetCounting (List Type)
+    | TypeSetCountingDestructure { element : Type, setExceptElement : Type }
     | TypeExceptConstruct Type
     | TypeSetCountingConstruct Type
     | TypeFunctionConstruct { input : Type, output : Type }
@@ -277,10 +276,13 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\setCountingVariant exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
+                (\setCountingVariant setCountingDestructureVariant exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
                         TypeSetCounting setCounting ->
                             setCountingVariant setCounting
+
+                        TypeSetCountingDestructure setCountingDestructure ->
+                            setCountingDestructureVariant setCountingDestructure
 
                         TypeExceptConstruct negativeType ->
                             exceptConstructVariant negativeType
@@ -298,6 +300,7 @@ typeMorphChars =
                             typeConstructVariant argument
                 )
                 |> Morph.rowTry TypeSetCounting (typeCountingSetMorphChars step)
+                |> Morph.rowTry TypeSetCountingDestructure (typeSetCountingDestructureMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct
                     (Morph.named "except construct"
                         (Morph.narrow (\negativeType -> negativeType)
@@ -435,6 +438,31 @@ typeCountingSetMorphChars step =
                     |> Morph.match (String.Morph.only "}")
                 )
             |> Morph.choiceFinish
+        )
+
+
+typeSetCountingDestructureMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
+typeSetCountingDestructureMorphChars step =
+    Morph.named "set counting destructure"
+        (Morph.narrow (\element setExceptElement -> { element = element, setExceptElement = setExceptElement })
+            |> Morph.match (String.Morph.only "{")
+            |> Morph.match
+                (Morph.broad [ () ]
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.grab .element step
+            |> Morph.match (String.Morph.only " ")
+            |> Morph.match
+                (Morph.broad []
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.match (String.Morph.only "...")
+            |> Morph.grab .setExceptElement step
+            |> Morph.match
+                (Morph.broad [ () ]
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.match (String.Morph.only "}")
         )
 
 
