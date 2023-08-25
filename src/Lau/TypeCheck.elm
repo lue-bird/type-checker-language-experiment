@@ -1,4 +1,4 @@
-module Lau.TypeCheck exposing (Define, DefineCase(..), DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, quotedMorphChars, typeMorphChars)
+module Lau.TypeCheck exposing (Define, DefineCase, DefineInCase(..), DefineMatch, Defines, Identifier, InvalidInfo, InvalidInfoElement(..), Type(..), charOrEscapedQuoteMorph, defineCaseMorphChars, defineInCaseMorphChars, defineMatchMorphChars, defineMorphChars, definesMorphChars, identifierMorphChars, invalidInfoElementMorphChars, invalidInfoMorphChars, quotedMorphChars, typeMorphChars)
 
 import AToZ exposing (AToZ)
 import AToZ.Morph
@@ -34,16 +34,18 @@ type alias DefineMatch =
     ListFilled DefineCase
 
 
-type DefineCase
-    = IsOfTypeSimplifiesTo { variable : Identifier, type_ : Type, simplified : DefineInCase }
+type alias DefineCase =
+    { variable : Identifier, type_ : Type, simplified : DefineInCase }
 
 
 type Type
     = TypeReference Identifier
-    | TypeSetCounting (List Type)
-    | TypeSetCountingDestructure { element : Type, setExceptElement : Type }
-    | TypeExceptConstruct Type
-    | TypeSetCountingConstruct Type
+    | -- dictionary
+      TypeDictionaryEmpty
+    | TypeDictionaryDestructure { element : Type, setExceptElement : Type }
+    | -- construct
+      TypeExceptConstruct Type
+    | TypeDictionaryConstruct { key : Type, value : Type }
     | TypeFunctionConstruct { input : Type, output : Type }
     | TypeConstruct { name : Identifier, argument : Type }
 
@@ -122,30 +124,26 @@ defineCaseMorphChars : { indentation : Int } -> MorphRow DefineCase Char
 defineCaseMorphChars config =
     morphLazy "case"
         (\() ->
-            Morph.oneToOne IsOfTypeSimplifiesTo
-                (\(IsOfTypeSimplifiesTo isOfTypeSimplifiesTo) -> isOfTypeSimplifiesTo)
-                |> Morph.overRow
-                    (Morph.narrow
-                        (\variable type_ simplified ->
-                            { variable = variable, type_ = type_, simplified = simplified }
-                        )
-                        |> Morph.grab .variable identifierMorphChars
-                        |> Morph.match
-                            (Morph.broad [ () ]
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.match (String.Morph.only ":")
-                        |> Morph.match
-                            (Morph.broad [ () ]
-                                |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                            )
-                        |> Morph.grab .type_ typeMorphChars
-                        |> Morph.match
-                            (String.Morph.only
-                                ("\n" ++ String.repeat (config.indentation + 1) "    ")
-                            )
-                        |> Morph.grab .simplified (defineInCaseMorphChars { indentation = config.indentation + 1 })
+            Morph.narrow
+                (\variable type_ simplified ->
+                    { variable = variable, type_ = type_, simplified = simplified }
+                )
+                |> Morph.grab .variable identifierMorphChars
+                |> Morph.match
+                    (Morph.broad [ () ]
+                        |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                     )
+                |> Morph.match (String.Morph.only ":")
+                |> Morph.match
+                    (Morph.broad [ () ]
+                        |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                    )
+                |> Morph.grab .type_ typeMorphChars
+                |> Morph.match
+                    (String.Morph.only
+                        ("\n" ++ String.repeat (config.indentation + 1) "    ")
+                    )
+                |> Morph.grab .simplified (defineInCaseMorphChars { indentation = config.indentation + 1 })
         )
 
 
@@ -276,31 +274,31 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\setCountingVariant setCountingDestructureVariant exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
+                (\dictionaryEmptyVariant dictionaryDestructureVariant exceptConstructVariant dictionaryConstructVariant functionConstructVariant typeConstructVariant referenceVariant type_ ->
                     case type_ of
-                        TypeSetCounting setCounting ->
-                            setCountingVariant setCounting
-
-                        TypeSetCountingDestructure setCountingDestructure ->
-                            setCountingDestructureVariant setCountingDestructure
-
-                        TypeExceptConstruct negativeType ->
-                            exceptConstructVariant negativeType
-
-                        TypeSetCountingConstruct typeSet ->
-                            setCountingConstructVariant typeSet
-
-                        TypeFunctionConstruct wiring ->
-                            functionConstructVariant wiring
+                        TypeDictionaryEmpty ->
+                            dictionaryEmptyVariant ()
 
                         TypeReference defined ->
                             referenceVariant defined
 
+                        TypeDictionaryDestructure dictionaryDestructure ->
+                            dictionaryDestructureVariant dictionaryDestructure
+
+                        TypeExceptConstruct negativeType ->
+                            exceptConstructVariant negativeType
+
+                        TypeDictionaryConstruct typeSet ->
+                            dictionaryConstructVariant typeSet
+
+                        TypeFunctionConstruct wiring ->
+                            functionConstructVariant wiring
+
                         TypeConstruct argument ->
                             typeConstructVariant argument
                 )
-                |> Morph.rowTry TypeSetCounting (typeCountingSetMorphChars step)
-                |> Morph.rowTry TypeSetCountingDestructure (typeSetCountingDestructureMorphChars step)
+                |> Morph.rowTry (\() -> TypeDictionaryEmpty) typeDictionaryEmptyMorphChars
+                |> Morph.rowTry TypeDictionaryDestructure (typeDictionaryDestructureMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct
                     (Morph.named "except construct"
                         (Morph.narrow (\negativeType -> negativeType)
@@ -312,16 +310,65 @@ typeMorphChars =
                             |> Morph.grab (\negativeType -> negativeType) step
                         )
                     )
-                |> Morph.rowTry TypeSetCountingConstruct
-                    (Morph.named "set counting construct"
-                        (Morph.narrow (\negativeType -> negativeType)
-                            |> Morph.match (String.Morph.only "setCounting")
+                |> Morph.rowTry TypeDictionaryConstruct
+                    (Morph.named "dictionary construct"
+                        (Morph.narrow (\key value -> { key = key, value = value })
+                            |> Morph.match (String.Morph.only "dictionary")
                             |> Morph.match (String.Morph.only " ")
                             |> Morph.match
                                 (Morph.broad []
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
-                            |> Morph.grab (\negativeType -> negativeType) step
+                            |> Morph.match (String.Morph.only "{")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "key")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .key step
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "..")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "{")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "value")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.grab .value step
+                            |> Morph.match
+                                (Morph.broad [ () ]
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "..")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match typeDictionaryEmptyMorphChars
+                            |> Morph.match (String.Morph.only "}")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "}")
                         )
                     )
                 |> Morph.rowTry TypeFunctionConstruct
@@ -335,7 +382,7 @@ typeMorphChars =
                                 )
                             |> Morph.match (String.Morph.only "{")
                             |> Morph.match
-                                (Morph.broad [ () ]
+                                (Morph.broad []
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
                             |> Morph.match (String.Morph.only "in")
@@ -345,7 +392,17 @@ typeMorphChars =
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
                             |> Morph.grab .input step
-                            |> Morph.match (String.Morph.only ",")
+                            |> Morph.match (String.Morph.only " ")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "..")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match (String.Morph.only "{")
                             |> Morph.match
                                 (Morph.broad []
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
@@ -361,105 +418,72 @@ typeMorphChars =
                                 (Morph.broad [ () ]
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
+                            |> Morph.match (String.Morph.only "..")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
+                            |> Morph.match typeDictionaryEmptyMorphChars
+                            |> Morph.match (String.Morph.only "}")
+                            |> Morph.match
+                                (Morph.broad []
+                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                )
                             |> Morph.match (String.Morph.only "}")
                         )
                     )
-                |> Morph.rowTry TypeReference (Morph.named "reference" identifierMorphChars)
                 |> Morph.rowTry TypeConstruct
                     (Morph.named "construct"
                         (Morph.narrow (\name argument -> { name = name, argument = argument })
-                            |> Morph.match (String.Morph.only "(")
-                            |> Morph.match
-                                (Morph.broad []
-                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                                )
                             |> Morph.grab .name identifierMorphChars
                             |> Morph.match (String.Morph.only " ")
                             |> Morph.match
-                                (Morph.broad [ () ]
-                                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                                )
-                            |> Morph.grab .argument step
-                            |> Morph.match
                                 (Morph.broad []
                                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                                 )
-                            |> Morph.match (String.Morph.only ")")
+                            |> Morph.grab .argument step
                         )
                     )
+                |> Morph.rowTry TypeReference (Morph.named "reference" identifierMorphChars)
                 |> Morph.choiceFinish
         )
 
 
-typeCountingSetMorphChars : MorphRow Type Char -> MorphRow (List Type) Char
-typeCountingSetMorphChars step =
-    Morph.named "set counting"
-        (Morph.choice
-            (\emptyVariant filledVariant typeCountingSet ->
-                case typeCountingSet of
-                    [] ->
-                        emptyVariant ()
-
-                    head :: tail ->
-                        filledVariant (listFilledHeadTail head tail)
-            )
-            |> Morph.rowTry (\() -> [])
-                (Morph.narrow ()
-                    |> Morph.match (String.Morph.only "{")
-                    |> Morph.match
-                        (Morph.broad []
-                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                        )
-                    |> Morph.match (String.Morph.only "}")
-                )
-            |> Morph.rowTry listFilledToList
-                (Morph.narrow listFilledHeadTail
-                    |> Morph.match (String.Morph.only "{")
-                    |> Morph.match
-                        (Morph.broad [ () ]
-                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                        )
-                    |> Morph.grab listFilledHead step
-                    |> Morph.grab listFilledTail
-                        (Morph.whilePossible
-                            (Morph.narrow (\tailElement -> tailElement)
-                                |> Morph.match (String.Morph.only " ")
-                                |> Morph.match
-                                    (Morph.broad []
-                                        |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                                    )
-                                |> Morph.grab (\tailElement -> tailElement) step
-                            )
-                        )
-                    |> Morph.match
-                        (Morph.broad [ () ]
-                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                        )
-                    |> Morph.match (String.Morph.only "}")
-                )
-            |> Morph.choiceFinish
-        )
-
-
-typeSetCountingDestructureMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
-typeSetCountingDestructureMorphChars step =
-    Morph.named "set counting destructure"
+typeDictionaryDestructureMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
+typeDictionaryDestructureMorphChars step =
+    Morph.named "dictionary destructure"
         (Morph.narrow (\element setExceptElement -> { element = element, setExceptElement = setExceptElement })
             |> Morph.match (String.Morph.only "{")
-            |> Morph.match
-                (Morph.broad [ () ]
-                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
-                )
-            |> Morph.grab .element step
-            |> Morph.match (String.Morph.only " ")
             |> Morph.match
                 (Morph.broad []
                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                 )
-            |> Morph.match (String.Morph.only "...")
-            |> Morph.grab .setExceptElement step
+            |> Morph.grab .element step
             |> Morph.match
                 (Morph.broad [ () ]
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.match (String.Morph.only "..")
+            |> Morph.match
+                (Morph.broad []
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.grab .setExceptElement step
+            |> Morph.match
+                (Morph.broad []
+                    |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                )
+            |> Morph.match (String.Morph.only "}")
+        )
+
+
+typeDictionaryEmptyMorphChars : MorphRow () Char
+typeDictionaryEmptyMorphChars =
+    Morph.named "dictionary empty"
+        (Morph.narrow ()
+            |> Morph.match (String.Morph.only "{")
+            |> Morph.match
+                (Morph.broad []
                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                 )
             |> Morph.match (String.Morph.only "}")
