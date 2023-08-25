@@ -41,10 +41,10 @@ type DefineCase
 type
     Type
     -- TODO literal set
-    = TypeExceptConstruct Type
+    = TypeReference Identifier
+    | TypeExceptConstruct Type
     | TypeSetCountingConstruct Type
     | TypeFunctionConstruct { input : Type, output : Type }
-    | TypeReference Identifier
     | TypeConstruct { name : Identifier, argument : Type }
 
 
