@@ -277,8 +277,11 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
+                (\setCountingVariant exceptConstructVariant setCountingConstructVariant functionConstructVariant referenceVariant typeConstructVariant type_ ->
                     case type_ of
+                        TypeCountingSet setCounting ->
+                            setCountingVariant setCounting
+
                         TypeExceptConstruct negativeType ->
                             exceptConstructVariant negativeType
 
@@ -294,6 +297,7 @@ typeMorphChars =
                         TypeConstruct argument ->
                             typeConstructVariant argument
                 )
+                |> Morph.rowTry TypeCountingSet (typeCountingSetMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct
                     (Morph.named "except construct"
                         (Morph.narrow (\negativeType -> negativeType)
@@ -384,6 +388,56 @@ typeMorphChars =
         )
 
 
+typeCountingSetMorphChars : MorphRow Type Char -> MorphRow (List Type) Char
+typeCountingSetMorphChars step =
+    Morph.named "set counting"
+        (Morph.choice
+            (\emptyVariant filledVariant typeCountingSet ->
+                case typeCountingSet of
+                    [] ->
+                        emptyVariant ()
+
+                    head :: tail ->
+                        filledVariant (listFilledHeadTail head tail)
+            )
+            |> Morph.rowTry (\() -> [])
+                (Morph.narrow ()
+                    |> Morph.match (String.Morph.only "{")
+                    |> Morph.match
+                        (Morph.broad []
+                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                        )
+                    |> Morph.match (String.Morph.only "}")
+                )
+            |> Morph.rowTry listFilledToList
+                (Morph.narrow listFilledHeadTail
+                    |> Morph.match (String.Morph.only "{")
+                    |> Morph.match
+                        (Morph.broad [ () ]
+                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                        )
+                    |> Morph.grab listFilledHead step
+                    |> Morph.grab listFilledTail
+                        (Morph.whilePossible
+                            (Morph.narrow (\tailElement -> tailElement)
+                                |> Morph.match (String.Morph.only " ")
+                                |> Morph.match
+                                    (Morph.broad []
+                                        |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                                    )
+                                |> Morph.grab (\tailElement -> tailElement) step
+                            )
+                        )
+                    |> Morph.match
+                        (Morph.broad [ () ]
+                            |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
+                        )
+                    |> Morph.match (String.Morph.only "}")
+                )
+            |> Morph.choiceFinish
+        )
+
+
 
 --
 
@@ -461,3 +515,7 @@ listFilledHead =
 
 listFilledTail =
     \( _, tailList ) -> tailList
+
+
+listFilledToList =
+    \( headElement, tailElement ) -> headElement :: tailElement
