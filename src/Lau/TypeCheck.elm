@@ -258,10 +258,6 @@ defineMatchMorphChars config =
     Morph.named "match"
         (Morph.narrow listFilledHeadTail
             |> Morph.grab listFilledHead (defineCaseMorphChars config)
-            |> Morph.match
-                (String.Morph.only
-                    ("\n" ++ String.repeat config.indentation "    ")
-                )
             |> Morph.grab listFilledTail
                 (Morph.whilePossible
                     (Morph.narrow (\case_ -> case_)
