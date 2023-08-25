@@ -60,14 +60,15 @@ exampleDefinesInput =
     valid
 
 
-c : (naturalAtLeast minimum)
+c : naturalAtLeast minimum
     minimum : 0
         valid
-    minimum : (1Plus minimumFrom1)
+    minimum : 1Plus minimumFrom1
         c : 0
             invalid "less than minimum"
-        c : (1Plus cFrom1)
-            cFrom1 : (naturalAtLeast minimumFrom1)
+        c : 1Plus cFrom1
+            cFrom1 : naturalAtLeast minimumFrom1
+                valid
 """
 
 
@@ -198,41 +199,48 @@ inputAndDescriptionUi config =
             , Ui.paddingXY 0 20
             ]
             (Ui.text config.title)
-        , Ui.column []
-            [ Ui.el
-                [ Ui.paddingEach { eachSide0 | right = 5 }
-                ]
-                (Html.i
-                    [ HtmlA.class "fa fa-pencil"
-                    , HtmlA.attribute "aria-hidden" "true"
-                    , HtmlA.attribute "color" "rgb(255, 255, 0)"
+        , Ui.row [ Ui.spacing 50, UiFont.size 17 ]
+            [ Ui.column [ Ui.width Ui.fill ]
+                [ Ui.el
+                    [ Ui.paddingEach { eachSide0 | right = 5 }
                     ]
-                    []
-                    |> Ui.html
-                )
-            , UiInput.multiline
-                [ UiBackground.color (Ui.rgba 0 0 0 0)
-                , UiBorder.width 0
-                , HtmlA.style "color" "inherit" |> Ui.htmlAttribute
-                , UiFont.size 17
+                    (Html.i
+                        [ HtmlA.class "fa fa-pencil"
+                        , HtmlA.attribute "aria-hidden" "true"
+                        , HtmlA.attribute "color" "rgb(255, 255, 0)"
+                        ]
+                        []
+                        |> Ui.html
+                    )
+                , UiInput.multiline
+                    [ UiBackground.color (Ui.rgba 0 0 0 0)
+                    , UiBorder.width 0
+                    , HtmlA.style "color" "inherit" |> Ui.htmlAttribute
+                    ]
+                    { onChange = config.onInputChange
+                    , text = config.input
+                    , label = UiInput.labelHidden "sample defines string"
+                    , placeholder = Nothing
+                    , spellcheck = True
+                    }
+                    |> Ui.el [ Ui.width Ui.fill ]
                 ]
-                { onChange = config.onInputChange
-                , text = config.input
-                , label = UiInput.labelHidden "sample defines string"
-                , placeholder = Nothing
-                , spellcheck = True
-                }
-            ]
-        , [ case config.input |> Morph.toNarrow config.morph of
-                Err error ->
-                    Ui.text "failed:"
+            , Ui.column []
+                [ case config.input |> Morph.toNarrow config.morph of
+                    Err error ->
+                        [ Ui.text "failed:" ] |> Ui.paragraph []
 
-                Ok defines ->
-                    Ui.text ("succeeded as " ++ (defines |> Morph.toBroad config.morph))
-          ]
-            |> Ui.paragraph [ UiFont.size 20 ]
-        , Ui.map config.onDescriptionTreeEvent
-            (TreeUi.ui toStyle config.descriptionTreeState)
+                    Ok defines ->
+                        [ Ui.text "succeeded as"
+                        , [ (defines |> Morph.toBroad config.morph) |> Html.text ]
+                            |> Html.code []
+                            |> Ui.html
+                        ]
+                            |> Ui.column [ Ui.spacing 23 ]
+                , Ui.map config.onDescriptionTreeEvent
+                    (TreeUi.ui toStyle config.descriptionTreeState)
+                ]
+            ]
         ]
 
 
