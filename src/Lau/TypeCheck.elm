@@ -42,7 +42,7 @@ type Type
     = TypeReference Identifier
     | -- dictionary
       TypeDictionaryEmpty
-    | TypeDictionaryDestructure { element : Type, setExceptElement : Type }
+    | TypeDictionaryFilled { element : Type, setExceptElement : Type }
     | -- construct
       TypeExceptConstruct Type
     | TypeDictionaryConstruct { key : Type, value : Type }
@@ -294,7 +294,7 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\dictionaryEmptyVariant dictionaryDestructureVariant exceptConstructVariant dictionaryConstructVariant functionConstructVariant typeConstructVariant referenceVariant type_ ->
+                (\dictionaryEmptyVariant dictionaryFilledVariant exceptConstructVariant dictionaryConstructVariant functionConstructVariant typeConstructVariant referenceVariant type_ ->
                     case type_ of
                         TypeDictionaryEmpty ->
                             dictionaryEmptyVariant ()
@@ -302,8 +302,8 @@ typeMorphChars =
                         TypeReference defined ->
                             referenceVariant defined
 
-                        TypeDictionaryDestructure dictionaryDestructure ->
-                            dictionaryDestructureVariant dictionaryDestructure
+                        TypeDictionaryFilled dictionaryFilled ->
+                            dictionaryFilledVariant dictionaryFilled
 
                         TypeExceptConstruct negativeType ->
                             exceptConstructVariant negativeType
@@ -318,7 +318,7 @@ typeMorphChars =
                             typeConstructVariant argument
                 )
                 |> Morph.rowTry (\() -> TypeDictionaryEmpty) typeDictionaryEmptyMorphChars
-                |> Morph.rowTry TypeDictionaryDestructure (typeDictionaryDestructureMorphChars step)
+                |> Morph.rowTry TypeDictionaryFilled (typeDictionaryFilledMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct (typeExceptConstructMorphChar step)
                 |> Morph.rowTry TypeDictionaryConstruct (typeDictionaryConstructMorphChars step)
                 |> Morph.rowTry TypeFunctionConstruct (typeFunctionConstructMorphChars step)
@@ -387,9 +387,9 @@ typeDictionaryConstructMorphChars step =
         )
 
 
-typeDictionaryDestructureMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
-typeDictionaryDestructureMorphChars step =
-    Morph.named "dictionary destructure"
+typeDictionaryFilledMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
+typeDictionaryFilledMorphChars step =
+    Morph.named "dictionary filled"
         (Morph.narrow (\element setExceptElement -> { element = element, setExceptElement = setExceptElement })
             |> Morph.match (String.Morph.only "{")
             |> Morph.match
