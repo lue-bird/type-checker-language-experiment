@@ -38,6 +38,27 @@ type alias DefineCase =
     { variable : Identifier, type_ : Type, simplified : DefineInCase }
 
 
+{-| For every type `t`
+
+```lausdiemaus
+t : Type
+    valid
+```
+
+with the possible cases
+
+```lausdiemaus
+t : Type
+    t : lookup
+    t : function {in Type ..{out Type ..{}}}
+
+t : lookup
+    t : {}
+    t : {{key Type ..{value Type ..{}}} ..exceptElement}
+        exceptElement : lookup
+```
+
+-}
 type Type
     = TypeReference Identifier
     | -- lookup
