@@ -40,12 +40,12 @@ type alias DefineCase =
 
 type Type
     = TypeReference Identifier
-    | -- dictionary
-      TypeDictionaryEmpty
-    | TypeDictionaryFilled { element : Type, setExceptElement : Type }
+    | -- lookup
+      TypeLookupEmpty
+    | TypeLookupFilled { element : Type, setExceptElement : Type }
     | -- construct
       TypeExceptConstruct Type
-    | TypeDictionaryConstruct { key : Type, value : Type }
+    | TypeLookupConstruct { key : Type, value : Type }
     | TypeFunctionConstruct { input : Type, output : Type }
     | TypeConstruct { name : Identifier, argument : Type }
 
@@ -294,22 +294,22 @@ typeMorphChars =
     Morph.recursive "type"
         (\step ->
             Morph.choice
-                (\dictionaryEmptyVariant dictionaryFilledVariant exceptConstructVariant dictionaryConstructVariant functionConstructVariant typeConstructVariant referenceVariant type_ ->
+                (\lookupEmptyVariant lookupFilledVariant exceptConstructVariant lookupConstructVariant functionConstructVariant typeConstructVariant referenceVariant type_ ->
                     case type_ of
-                        TypeDictionaryEmpty ->
-                            dictionaryEmptyVariant ()
+                        TypeLookupEmpty ->
+                            lookupEmptyVariant ()
 
                         TypeReference defined ->
                             referenceVariant defined
 
-                        TypeDictionaryFilled dictionaryFilled ->
-                            dictionaryFilledVariant dictionaryFilled
+                        TypeLookupFilled lookupFilled ->
+                            lookupFilledVariant lookupFilled
 
                         TypeExceptConstruct negativeType ->
                             exceptConstructVariant negativeType
 
-                        TypeDictionaryConstruct typeSet ->
-                            dictionaryConstructVariant typeSet
+                        TypeLookupConstruct typeLookupConstruct ->
+                            lookupConstructVariant typeLookupConstruct
 
                         TypeFunctionConstruct wiring ->
                             functionConstructVariant wiring
@@ -317,10 +317,10 @@ typeMorphChars =
                         TypeConstruct argument ->
                             typeConstructVariant argument
                 )
-                |> Morph.rowTry (\() -> TypeDictionaryEmpty) typeDictionaryEmptyMorphChars
-                |> Morph.rowTry TypeDictionaryFilled (typeDictionaryFilledMorphChars step)
+                |> Morph.rowTry (\() -> TypeLookupEmpty) typeLookupEmptyMorphChars
+                |> Morph.rowTry TypeLookupFilled (typeLookupFilledMorphChars step)
                 |> Morph.rowTry TypeExceptConstruct (typeExceptConstructMorphChar step)
-                |> Morph.rowTry TypeDictionaryConstruct (typeDictionaryConstructMorphChars step)
+                |> Morph.rowTry TypeLookupConstruct (typeLookupConstructMorphChars step)
                 |> Morph.rowTry TypeFunctionConstruct (typeFunctionConstructMorphChars step)
                 |> Morph.rowTry TypeConstruct (typeConstructMorphChars step)
                 |> Morph.rowTry TypeReference (Morph.named "reference" identifierMorphChars)
@@ -340,11 +340,11 @@ separatingSpacesMorph =
         )
 
 
-typeDictionaryConstructMorphChars : MorphRow Type Char -> MorphRow { key : Type, value : Type } Char
-typeDictionaryConstructMorphChars step =
-    Morph.named "dictionary construct"
+typeLookupConstructMorphChars : MorphRow Type Char -> MorphRow { key : Type, value : Type } Char
+typeLookupConstructMorphChars step =
+    Morph.named "lookup construct"
         (Morph.narrow (\key value -> { key = key, value = value })
-            |> Morph.match (String.Morph.only "dictionary")
+            |> Morph.match (String.Morph.only "lookup")
             |> Morph.match separatingSpacesMorph
             |> Morph.match (String.Morph.only "{")
             |> Morph.match
@@ -377,7 +377,7 @@ typeDictionaryConstructMorphChars step =
                 (Morph.broad []
                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                 )
-            |> Morph.match typeDictionaryEmptyMorphChars
+            |> Morph.match typeLookupEmptyMorphChars
             |> Morph.match (String.Morph.only "}")
             |> Morph.match
                 (Morph.broad []
@@ -387,9 +387,9 @@ typeDictionaryConstructMorphChars step =
         )
 
 
-typeDictionaryFilledMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
-typeDictionaryFilledMorphChars step =
-    Morph.named "dictionary filled"
+typeLookupFilledMorphChars : MorphRow Type Char -> MorphRow { element : Type, setExceptElement : Type } Char
+typeLookupFilledMorphChars step =
+    Morph.named "lookup filled"
         (Morph.narrow (\element setExceptElement -> { element = element, setExceptElement = setExceptElement })
             |> Morph.match (String.Morph.only "{")
             |> Morph.match
@@ -415,9 +415,9 @@ typeDictionaryFilledMorphChars step =
         )
 
 
-typeDictionaryEmptyMorphChars : MorphRow () Char
-typeDictionaryEmptyMorphChars =
-    Morph.named "dictionary empty"
+typeLookupEmptyMorphChars : MorphRow () Char
+typeLookupEmptyMorphChars =
+    Morph.named "lookup empty"
         (Morph.narrow ()
             |> Morph.match (String.Morph.only "{")
             |> Morph.match
@@ -465,7 +465,7 @@ typeFunctionConstructMorphChars step =
                 (Morph.broad []
                     |> Morph.overRow (Morph.whilePossible (String.Morph.only " "))
                 )
-            |> Morph.match typeDictionaryEmptyMorphChars
+            |> Morph.match typeLookupEmptyMorphChars
             |> Morph.match (String.Morph.only "}")
             |> Morph.match
                 (Morph.broad []
